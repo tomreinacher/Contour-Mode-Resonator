@@ -99,35 +99,40 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
     union_component = gf.geometry.union(union_component, by_layer=False, layer=metal_layer)
 
     ############Create label for straight IDT###################
-    t = gf.Component("label")
+    label = gf.Component("label")
     text = f"Elec num = {electrode_number}\nElec w = {electrode_width}\nElec gap = {electrode_separation}"
     
-    label = t << gf.components.text(
+    label_contents = label << gf.components.text(
         text=text,
-        size=5,
-        position=[originx - 100, originy - 15],
+       size=5,
+        position=[originx - 50, originy - 15],
         justify='left',
         layer=metal_layer
     )
 
     complete_component = gf.Component("straight idt and label")
     complete_component << union_component
-    complete_component << t
+    complete_component << label
 
     ###########Create bounding box for HSQ#####################
-    exposed_hsq = gf.Component("HSQ hard mask")
-    exposed_hsq << complete_component
-    p1 = exposed_hsq.get_polygon_bbox()
-    p2 = p1.buffer(10)
-    exposed_hsq.add_polygon(p2, layer=resist_layer)
-    
+    def get_bbox(complete_component):
+        get_bbox = gf.Component("getting bbox")
+        get_bbox << complete_component
+        p1 = get_bbox.get_polygon_bbox()
+        p2 = p1.buffer(10)
+        return p2
+
+    bbox_component = gf.Component("bbox_component")
+    p2 = get_bbox(complete_component)
+    bbox_component.add_polygon(p2, layer=resist_layer)
+
     ################Create etch windows#######################
     etch_window = gf.Component("etch_window") #define top etch window subcomponents
 
-    etch_window_length = 2*bus_width + electrode_length + electrode_end_margin #horizontal window length
+    etch_window_length = 2*bus_width + electrode_length + electrode_end_margin + 2*(etch_buffer + etch_window_gap) #horizontal window length
     etch_window_height = bus_length/2 - arm_width/2 #vertical window length
     
-    top_x1 = originx
+    top_x1 = originx-(etch_buffer + etch_window_gap)
     top_x2 = top_x1 + etch_window_length
     top_y1 = bus_length + etch_buffer
     top_y2 = top_y1 + etch_window_gap
@@ -137,18 +142,22 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
     left_y1 = bus_length/2 + arm_width/2 + etch_buffer
     left_y2 = left_y1 + etch_window_height
 
-    right_x1 = etch_window_length + etch_buffer
+    right_x1 = originx + 2*bus_width + electrode_length + electrode_end_margin + etch_buffer
     right_x2 = right_x1 + etch_window_gap
     right_y1 = bus_length/2 + arm_width/2 + etch_buffer
     right_y2 = right_y1 + etch_window_height
 
-    top_window = etch_window.add_polygon([(top_x1,top_y1),(top_x1,top_y2),(top_x2,top_y2),(top_x2,top_y1)],layer=resist_layer)
-    left_window = etch_window.add_polygon([(left_x1,left_y1),(left_x1,left_y2),(left_x2,left_y2),(left_x2,left_y1)],layer=resist_layer)
-    right_window = etch_window.add_polygon([(right_x1,right_y1),(right_x1,right_y2),(right_x2,right_y2),(right_x2,right_y1)],layer=resist_layer)
+    #union acting weird and only taking two arguments so I have to make this dodgy fix and do two unions, sorry 
+    
+    etch_window_union1 = gf.Component("etch_window_union") #make union so there is one continuous top etch window
+    top_window = etch_window_union1.add_polygon([(top_x1,top_y1),(top_x1,top_y2),(top_x2,top_y2),(top_x2,top_y1)],layer=resist_layer)
+    left_window = etch_window_union1.add_polygon([(left_x1,left_y1),(left_x1,left_y2),(left_x2,left_y2),(left_x2,left_y1)],layer=resist_layer)
+    etch_window_union1 = gf.geometry.union(etch_window_union1, by_layer=False, layer=resist_layer)
 
-    etch_window_union = gf.Component("etch_window_union") #make union so there is one continuous top etch window
-    etch_window_union << etch_window
-    etch_window_union = gf.geometry.union(etch_window_union, by_layer=False, layer=resist_layer)
+    etch_window_union2 = gf.Component("etch_window_union2") #make union so there is one continuous top etch window
+    etch_window_union2 << etch_window_union1
+    right_window = etch_window_union2.add_polygon([(right_x1,right_y1),(right_x1,right_y2),(right_x2,right_y2),(right_x2,right_y1)],layer=resist_layer)
+    etch_window_union2 = gf.geometry.union(etch_window_union2, by_layer=False, layer=resist_layer)
 
     etch_window_complete = gf.Component("etch_window_complete") #mirror top etch window so there are two etch windows top and bottom
     
@@ -156,22 +165,18 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
     mirror_originy = originy + bus_length/2
     mirror_p1 = mirror_originx + etch_window_length/2
     
-    top_window = etch_window_complete << etch_window_union
-    bottom_window = etch_window_complete << etch_window_union
+    top_window = etch_window_complete << etch_window_union2
+    bottom_window = etch_window_complete << etch_window_union2
     bottom_window.mirror(p1=[mirror_originx,mirror_originy],p2=[mirror_p1,mirror_originy])
 
-    hsq_layer = gf.Component("hsq_layer") #NOT operation to create parts of HSQ layer that are not exposed 
-    hsq_layer << exposed_hsq
-    hsq_layer << etch_window_complete
-    gf.geometry.boolean(A=exposed_hsq, B=etch_window_complete, operation="not", precision=1e-6, layer=resist_layer)
-
+    hsq_layer = gf.Component("hsq_layer")
+    hsq_layer << gf.geometry.boolean(A=bbox_component, B=etch_window_complete, operation="not", precision=1e-6, layer=resist_layer) #not operation to remove windows from hsq layer
+    
     final_component = gf.Component("final_component")
     final_component << hsq_layer
     final_component << complete_component
 
-   
     return final_component
-
 
 component = gf.Component("straight_IDT")
 component << straight_idt(originx,originy,electrode_number,electrode_separation,electrode_width)
