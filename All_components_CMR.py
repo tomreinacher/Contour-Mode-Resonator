@@ -17,39 +17,40 @@ resist_layer = (2,0)
 pad_width = 100
 pad_height = 50
 
-arm_width = 15 #width of arm between pad and IDT
+arm_width= 5 #width of arm between pad and taper
 
 #####################################
 #IDT properties
 
-electrode_number = 100
+electrode_number = 40
 electrode_length = 60
 electrode_width = 0.25
 electrode_separation = 0.25
 electrode_end_margin = 10  #distance between bus and electrode of opposite potential
 
-bus_width = 20 #width of metal electrode connecting idt fingers
+bus_width = 5 #width of metal electrode connecting idt fingers
 
 ########################################
 #Etch window properties
 etch_window_gap = 5
 etch_buffer = 1 #distance between IDTs and etch window
 
-def straight_idt(originx,originy,electrode_number,electrode_separation,electrode_width):
+def flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width):
     c = gf.Component("pad_and_bus")
     
-    ################Add one bus + port###################
+    ################Add one bus, tether, taper + port###################
     bus_length = electrode_number*(electrode_width+electrode_separation)-electrode_separation #length of metal electrode connecting idt fingers
 
     bus = c.add_polygon(
         [(originx,originx,bus_width,bus_width),(originy,bus_length,bus_length,originy)],layer=metal_layer
     )
+
     c.add_port(
         name="bus_port",center=[0,bus_length/2],width=arm_width,orientation=180,layer=metal_layer #standard orientation of port is parallel to y axis
     )
 
     ##############Add one pad + port #######################
-    pad_originx = originx-pad_width/2
+    pad_originx = originx-3*pad_width/4
     pad_originy = originy+2*bus_length 
 
     pad = c.add_polygon(
@@ -61,7 +62,11 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
 
     ##########Get route between bus and pad#################
 
-    route = gf.routing.get_route(c.ports["bus_port"], c.ports["pad_port"],width = arm_width)
+    route = gf.routing.get_route(
+        c.ports["bus_port"], 
+        c.ports["pad_port"],
+        width = arm_width
+    )
     c.add(route.references)
 
     ##########Mirror bus and pad about center of IDT#############
@@ -100,7 +105,7 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
 
     ############Create label for straight IDT###################
     label = gf.Component("label")
-    text = f"Elec num = {electrode_number}\nElec w = {electrode_width}\nElec gap = {electrode_separation}"
+    text = f"Pair num = {electrode_number/2}\nPeriod = {2*(electrode_width+electrode_separation)}\nTether w = {arm_width+2*etch_buffer}"
     
     label_contents = label << gf.components.text(
         text=text,
@@ -115,16 +120,16 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
     complete_component << label
 
     ###########Create bounding box for HSQ#####################
-    def get_bbox(complete_component):
-        get_bbox = gf.Component("getting bbox")
-        get_bbox << complete_component
-        p1 = get_bbox.get_polygon_bbox()
-        p2 = p1.buffer(10)
-        return p2
+    #def get_bbox(complete_component):
+       # get_bbox = gf.Component("getting bbox")
+       # get_bbox << complete_component
+       # p1 = get_bbox.get_polygon_bbox()
+       # p2 = p1.buffer(10)
+       # return p2
 
-    bbox_component = gf.Component("bbox_component")
-    p2 = get_bbox(complete_component)
-    bbox_component.add_polygon(p2, layer=resist_layer)
+   # bbox_component = gf.Component("bbox_component")
+   # p2 = get_bbox(complete_component)
+   # bbox_component.add_polygon(p2, layer=resist_layer)
 
     ################Create etch windows#######################
     etch_window = gf.Component("etch_window") #define top etch window subcomponents
@@ -169,17 +174,17 @@ def straight_idt(originx,originy,electrode_number,electrode_separation,electrode
     bottom_window = etch_window_complete << etch_window_union2
     bottom_window.mirror(p1=[mirror_originx,mirror_originy],p2=[mirror_p1,mirror_originy])
 
-    hsq_layer = gf.Component("hsq_layer")
-    hsq_layer << gf.geometry.boolean(A=bbox_component, B=etch_window_complete, operation="not", precision=1e-6, layer=resist_layer) #not operation to remove windows from hsq layer
+    #hsq_layer = gf.Component("hsq_layer")
+    #hsq_layer << gf.geometry.boolean(A=bbox_component, B=etch_window_complete, operation="not", precision=1e-6, layer=resist_layer) #not operation to remove windows from hsq layer
     
     final_component = gf.Component("final_component")
-    final_component << hsq_layer
+    final_component << etch_window_complete
     final_component << complete_component
 
     return final_component
 
-component = gf.Component("straight_IDT")
-component << straight_idt(originx,originy,electrode_number,electrode_separation,electrode_width)
+component = gf.Component("flat_cmr")
+component << flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width)
 
 component.write_gds("teststructures.gds")
 component.show()
