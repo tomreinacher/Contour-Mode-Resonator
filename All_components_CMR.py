@@ -45,13 +45,16 @@ bus_width = 5 #width of metal electrode connecting idt fingers
 angle = 0 #angle of the entire CMR component - label #DOESN'T WORK
 k = etch_window_gap/2 #curvature factor, r2 of ellipse used to construct curved etch window
 
+radius = 25 #outer radius of undercut ring test structure
+width = 20 #width of test ring
+
 ######################################################################
 #                      Flat-edge CMR Method                          #
 ######################################################################   
 '''Instead of porting each individual IDT finger to the bus, a union is done between all metallized parts to create one solid metal layer component.
  The etch windows are also defined using unions instead of ports. The bus/pad and route are done using ports and defined more correctly.'''
 
-def flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,tether_width,angle):
+def flat_cmr(destinationx,destinationy,electrode_number,electrode_separation,electrode_width,tether_width,angle):
     #c = gf.Component("pad_and_bus")
     
     ################Add one bus, tether, taper + port###################
@@ -224,9 +227,13 @@ def flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_wid
     )
 
     #########Define final flat-edge CMR component#############
+    CMR_and_label = gf.Component("final_component")
+    CMR_and_label << CMR_component
+    CMR_and_label << label
+
     final_component = gf.Component("final_component")
-    final_component << CMR_component
-    final_component << label
+    fc = final_component << CMR_and_label
+    fc.move(origin=[originx,originy],destination=[destinationx,destinationy])
 
     return final_component
 
@@ -237,7 +244,7 @@ def flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_wid
 '''The curvature is defined by subtracting an ellipse with two radii r1,r2 from a rectangle. 
 That means adding curvature adds area to the resonator and substracts area from the etch window.'''
 
-def biconvex_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,tether_width,angle,k):
+def biconvex_cmr(destinationx,destinationy,electrode_number,electrode_separation,electrode_width,tether_width,angle,k):
     #c = gf.Component("pad_and_bus")
     
     ################Add one bus, tether, taper + port###################
@@ -437,25 +444,137 @@ def biconvex_cmr(originx,originy,electrode_number,electrode_separation,electrode
     )
 
     #########Define final biconvex-edge CMR component#############
-    final_component = gf.Component("final_component")
-    final_component << CMR_component
-    final_component << label
+    CMR_and_label = gf.Component("CMR and label")
+    CMR_and_label << CMR_component
+    CMR_and_label << label
 
+    final_component = gf.Component("final_component")
+    fc = final_component << CMR_and_label
+    fc.move(origin=[originx,originy],destination=[destinationx,destinationy])
+    
     return final_component
 
-all_components = gf.Component("flat_CMR")
-c1 = all_components << flat_cmr(originx,originy,20,electrode_separation,electrode_width,2.5,angle)
-c2 = all_components << flat_cmr(originx,originy,40,electrode_separation,electrode_width,5,angle)
-c3 = all_components << flat_cmr(originx,originy,60,electrode_separation,electrode_width,10,angle)
-c4 = all_components << biconvex_cmr(originx,originy,20,electrode_separation,electrode_width,2.5,angle,k)
-c5 = all_components << biconvex_cmr(originx,originy,40,electrode_separation,electrode_width,5,angle,k)
-c6 = all_components << biconvex_cmr(originx,originy,60,electrode_separation,electrode_width,10,angle,k)
+###########################################################
+#            Undercut Test Structures Method              #
+###########################################################
 
-c2.move([300,0])
-c3.move([600,0])
-c4.move([0,200])
-c5.move([300,200])
-c6.move([600,200])
+def undercut_ring(destinationx,destinationy,radius,width):
+    #radius is center radius of ring between inner radius and outer radius
+    radius = 25 - width/2 
+
+    tether_width = 10
+    tether_length = etch_window_gap + etch_buffer
+
+    left_port_x = originx-radius-width/2+0.5
+    left_port_y = originy
+
+    right_port_x = originx+radius+width/2-0.5
+    right_port_y = originy
+
+    ring =gf.Component("ring")
+    c1 = ring << gf.components.ring(radius=radius, width=width, angle_resolution=2.5, layer=metal_layer)
+    ring.add_port(
+        name="left_port", center=[left_port_x,left_port_y], width=tether_width, orientation=180, layer=metal_layer
+    )
+    ring.add_port(
+        name="right_port", center=[right_port_x,right_port_y], width=tether_width, orientation=0, layer=metal_layer
+    )
+
+    left_tether = gf.Component("left_tether")
+    t1 = left_tether.add_polygon(
+        [(originx,originx,originx+tether_length,originx+tether_length),(originy,originy+tether_width,originy+tether_width,originy)]
+    )
+    left_tether.add_port(
+        name="lp", center=[originx+tether_length,originy+tether_width/2], width=tether_width, orientation=0, layer=metal_layer
+    )
+
+    right_tether = gf.Component("right_tether")
+    t1 = right_tether.add_polygon(
+        [(originx,originx,originx+tether_length,originx+tether_length),(originy,originy+tether_width,originy+tether_width,originy)]
+    )
+    right_tether.add_port(
+        name="rp", center=[originx,originy+tether_width/2], width=tether_width, orientation=180, layer=metal_layer
+    )
+
+    ring_and_tethers = gf.Component("ring_and_tethers")
+    r = ring_and_tethers << ring
+    lt = ring_and_tethers << left_tether
+    rt = ring_and_tethers << right_tether
+    lt.connect("lp", r.ports["left_port"])
+    rt.connect("rp",r.ports["right_port"])
+    
+    tethered_ring = gf.Component("tethered_ring")
+    tethered_ring << gf.geometry.union(ring_and_tethers, layer=metal_layer)
+    
+    #get bound box
+    boundary = gf.Component("boundary")
+    boundary << tethered_ring
+    p1 = boundary.get_polygon_bbox(top=3, bottom=3)
+    p2 = boundary.add_polygon(p1, layer=resist_layer)
+
+    difference_resist = gf.Component("difference")
+    R = difference_resist << tethered_ring
+    P = difference_resist << boundary
+    difference_box = gf.geometry.boolean(A=P, B=R, operation="not", precision=1e-6, layer=resist_layer)
+
+    ring_and_resist = gf.Component("ring_and_resist")
+    fc = ring_and_resist << difference_box
+
+    fc.move(origin=[originx,originy],destination=[destinationx,destinationy])
+
+    return ring_and_resist
+
+#####################################################
+#            Alignment Marker Method                #
+#####################################################    
+
+def alignment_marker(originx,originy):
+    
+    alignment = gf.Component("alignment_2")  
+   
+    corner_1 = alignment.add_ref(gf.components.L(width=0.5, size=[1, 1], layer=(1,0)))
+    corner_1.move(destination = (originx,originy))
+    corner_2 = alignment.add_ref(gf.components.L(width=1, size=[3, 3], layer=(1,0)))
+    corner_2.move(destination = (originx-5,originy-5)) 
+    corner_3 = alignment.add_ref(gf.components.L(width=2, size=[6, 6], layer=(1,0)))
+    corner_3.move(destination = (originx-13,originy-13)) 
+    corner_4 = alignment.add_ref(gf.components.L(width=2, size=[12, 12], layer=(1,0)))
+    corner_4.move(destination = (originx-25,originy-25))  
+    corner_5 = alignment.add_ref(gf.components.L(width=2, size=[24, 24], layer=(1,0)))
+    corner_5.move(destination = (originx-45,originy-45))  
+    corner_6 = alignment.add_ref(gf.components.L(width=2, size=[50, 50], layer=(1,0)))
+    corner_6.move(destination = (originx-105,originy-105)) 
+    corner_7 = alignment.add_ref(gf.components.L(width=2, size=[100, 100], layer=(1,0)))
+    corner_7.move(destination = (originx-205,originy-205))  
+    corner_box =  alignment.add_polygon(points = [(originx-235, originy-235),(originx-235,originy-215),(originx-215,originy-215),(originx-215,originy-235)], layer = metal_layer)
+    
+    mirror1 = alignment.mirror(p1 = (originx+5,originy), p2 = (originx+5,originy+1))
+    mirror2 = mirror1.mirror(p1 = (originx,originy+5), p2 = (originx+1,originy+5))
+    mirror3 = mirror2.mirror(p1 = (originx+5,originy), p2 = (originx+5,originy+1))
+    
+    cross = alignment.add_ref(gf.components.align_wafer(width=0.2, spacing=1.5, cross_length=3, layer=metal_layer, square_corner='bottom_left'))
+    cross.move(destination = (originx+5,originy+5))
+
+    align_component = gf.Component("all corners")
+    align_component << alignment
+    align_component << mirror1
+    align_component << mirror2
+    align_component << mirror3
+    return align_component
+
+
+all_components = gf.Component("all components")
+c1 = all_components << flat_cmr(originx,originy,20,electrode_separation,electrode_width,2.5,angle)
+c2 = all_components << flat_cmr(300,0,40,electrode_separation,electrode_width,5,angle)
+c3 = all_components << flat_cmr(600,0,60,electrode_separation,electrode_width,10,angle)
+c4 = all_components << biconvex_cmr(originx,200,20,electrode_separation,electrode_width,2.5,angle,k)
+c5 = all_components << biconvex_cmr(300,200,40,electrode_separation,electrode_width,5,angle,k)
+c6 = all_components << biconvex_cmr(600,200,60,electrode_separation,electrode_width,10,angle,k)
+all_components << undercut_ring(originx,400,radius,width)
+all_components << undercut_ring(300,400,radius,15)
+all_components  << undercut_ring(600,400,radius,10)
+all_components << alignment_marker(700,700)
+
 
 all_components.write_gds("all_components.gds")
 all_components.show()
