@@ -48,13 +48,15 @@ k = etch_window_gap/2 #curvature factor, r2 of ellipse used to construct curved 
 radius = 25 #outer radius of undercut ring test structure
 width = 20 #width of test ring
 
+undercut = True #define if undercut is to be used or not, for debug structures
+
 ######################################################################
 #                      Flat-edge CMR Method                          #
 ######################################################################   
 '''Instead of porting each individual IDT finger to the bus, a union is done between all metallized parts to create one solid metal layer component.
  The etch windows are also defined using unions instead of ports. The bus/pad and route are done using ports and defined more correctly.'''
 
-def flat_cmr(destinationx,destinationy,electrode_number,electrode_separation,electrode_width,tether_width,angle):
+def flat_cmr(destinationx,destinationy,electrode_number,electrode_separation,electrode_width,tether_width,angle,undercut):
     #c = gf.Component("pad_and_bus")
     
     ################Add one bus, tether, taper + port###################
@@ -165,52 +167,54 @@ def flat_cmr(destinationx,destinationy,electrode_number,electrode_separation,ele
     union_component = gf.geometry.union(union_component, by_layer=False, layer=metal_layer)
 
     ################Create etch windows#######################
-    etch_window = gf.Component("etch_window") #define top etch window subcomponents
+    if undercut:
+        etch_window = gf.Component("etch_window") #define top etch window subcomponents
 
-    etch_window_length = 2*bus_width + electrode_length + electrode_end_margin + 2*(etch_buffer + etch_window_gap) #horizontal window length
-    etch_window_height = bus_length/2 - tether_width/2 #vertical window length
+        etch_window_length = 2*bus_width + electrode_length + electrode_end_margin + 2*(etch_buffer + etch_window_gap) #horizontal window length
+        etch_window_height = bus_length/2 - tether_width/2 #vertical window length
     
-    top_x1 = originx-(etch_buffer + etch_window_gap)
-    top_x2 = top_x1 + etch_window_length
-    top_y1 = bus_length + etch_buffer
-    top_y2 = top_y1 + etch_window_gap
+        top_x1 = originx-(etch_buffer + etch_window_gap)
+        top_x2 = top_x1 + etch_window_length
+        top_y1 = bus_length + etch_buffer
+        top_y2 = top_y1 + etch_window_gap
 
-    left_x1 = originx - etch_window_gap - etch_buffer
-    left_x2 = left_x1 + etch_window_gap
-    left_y1 = bus_length/2 + tether_width/2 + etch_buffer
-    left_y2 = left_y1 + etch_window_height
+        left_x1 = originx - etch_window_gap - etch_buffer
+        left_x2 = left_x1 + etch_window_gap
+        left_y1 = bus_length/2 + tether_width/2 + etch_buffer
+        left_y2 = left_y1 + etch_window_height
 
-    right_x1 = originx + 2*bus_width + electrode_length + electrode_end_margin + etch_buffer
-    right_x2 = right_x1 + etch_window_gap
-    right_y1 = bus_length/2 + tether_width/2 + etch_buffer
-    right_y2 = right_y1 + etch_window_height
+        right_x1 = originx + 2*bus_width + electrode_length + electrode_end_margin + etch_buffer
+        right_x2 = right_x1 + etch_window_gap
+        right_y1 = bus_length/2 + tether_width/2 + etch_buffer
+        right_y2 = right_y1 + etch_window_height
 
-    #union acting weird and only taking two arguments so I have to make this dodgy fix and do two unions, sorry 
+        #union acting weird and only taking two arguments so I have to make this dodgy fix and do two unions, sorry 
     
-    etch_window_union1 = gf.Component("etch_window_union") #make union so there is one continuous top etch window
-    top_window = etch_window_union1.add_polygon([(top_x1,top_y1),(top_x1,top_y2),(top_x2,top_y2),(top_x2,top_y1)],layer=resist_layer)
-    left_window = etch_window_union1.add_polygon([(left_x1,left_y1),(left_x1,left_y2),(left_x2,left_y2),(left_x2,left_y1)],layer=resist_layer)
-    etch_window_union1 = gf.geometry.union(etch_window_union1, by_layer=False, layer=resist_layer)
+        etch_window_union1 = gf.Component("etch_window_union") #make union so there is one continuous top etch window
+        top_window = etch_window_union1.add_polygon([(top_x1,top_y1),(top_x1,top_y2),(top_x2,top_y2),(top_x2,top_y1)],layer=resist_layer)
+        left_window = etch_window_union1.add_polygon([(left_x1,left_y1),(left_x1,left_y2),(left_x2,left_y2),(left_x2,left_y1)],layer=resist_layer)
+        etch_window_union1 = gf.geometry.union(etch_window_union1, by_layer=False, layer=resist_layer)
 
-    etch_window_union2 = gf.Component("etch_window_union2") #make union so there is one continuous top etch window
-    etch_window_union2 << etch_window_union1
-    right_window = etch_window_union2.add_polygon([(right_x1,right_y1),(right_x1,right_y2),(right_x2,right_y2),(right_x2,right_y1)],layer=resist_layer)
-    etch_window_union2 = gf.geometry.union(etch_window_union2, by_layer=False, layer=resist_layer)
+        etch_window_union2 = gf.Component("etch_window_union2") #make union so there is one continuous top etch window
+        etch_window_union2 << etch_window_union1
+        right_window = etch_window_union2.add_polygon([(right_x1,right_y1),(right_x1,right_y2),(right_x2,right_y2),(right_x2,right_y1)],layer=resist_layer)
+        etch_window_union2 = gf.geometry.union(etch_window_union2, by_layer=False, layer=resist_layer)
 
-    etch_window_complete = gf.Component("etch_window_complete") #mirror top etch window so there are two etch windows top and bottom
+        etch_window_complete = gf.Component("etch_window_complete") #mirror top etch window so there are two etch windows top and bottom
     
-    mirror_originx = originx 
-    mirror_originy = originy + bus_length/2
-    mirror_p1 = mirror_originx + etch_window_length/2
+        mirror_originx = originx 
+        mirror_originy = originy + bus_length/2
+        mirror_p1 = mirror_originx + etch_window_length/2
     
-    top_window = etch_window_complete << etch_window_union2
-    bottom_window = etch_window_complete << etch_window_union2
-    bottom_window.mirror(p1=[mirror_originx,mirror_originy],p2=[mirror_p1,mirror_originy])
+        top_window = etch_window_complete << etch_window_union2
+        bottom_window = etch_window_complete << etch_window_union2
+        bottom_window.mirror(p1=[mirror_originx,mirror_originy],p2=[mirror_p1,mirror_originy])
 
     ###########Make component including etch windows and CMR and rotate if necessary##################
     CMR_component = gf.Component("CMR_component")
     CMR_component << union_component
-    CMR_component << etch_window_complete
+    if undercut:
+        CMR_component << etch_window_complete
     CMR_component.rotate(angle)
 
 
@@ -564,9 +568,9 @@ def alignment_marker(originx,originy):
 
 
 all_components = gf.Component("all components")
-c1 = all_components << flat_cmr(originx,originy,20,electrode_separation,electrode_width,2.5,angle)
-c2 = all_components << flat_cmr(300,0,40,electrode_separation,electrode_width,5,angle)
-c3 = all_components << flat_cmr(600,0,60,electrode_separation,electrode_width,10,angle)
+c1 = all_components << flat_cmr(originx,originy,20,electrode_separation,electrode_width,2.5,angle,False)
+c2 = all_components << flat_cmr(300,0,40,electrode_separation,electrode_width,5,angle,undercut)
+c3 = all_components << flat_cmr(600,0,60,electrode_separation,electrode_width,10,45,undercut)
 c4 = all_components << biconvex_cmr(originx,200,20,electrode_separation,electrode_width,2.5,angle,k)
 c5 = all_components << biconvex_cmr(300,200,40,electrode_separation,electrode_width,5,angle,k)
 c6 = all_components << biconvex_cmr(600,200,60,electrode_separation,electrode_width,10,angle,k)
