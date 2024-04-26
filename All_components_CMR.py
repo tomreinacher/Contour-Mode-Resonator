@@ -41,6 +41,7 @@ electrode_separation = 0.25
 electrode_end_margin = 10  #distance between bus and electrode of opposite potential
 
 bus_width = 5 #width of metal electrode connecting idt fingers
+bus_length = electrode_number*(electrode_width+electrode_separation)-electrode_separation 
 
 angle = 0 #angle of the entire CMR component - label #DOESN'T WORK
 k = etch_window_gap/2 #curvature factor, r2 of ellipse used to construct curved etch window
@@ -566,18 +567,44 @@ def alignment_marker(originx,originy):
     align_component << mirror3
     return align_component
 
+#############################################################################
+#             Create grid with parametric sweep                             #
+#############################################################################
+components_list = []
+for w in [2.5,5,10,15,20]:
+    A = undercut_ring(originx,originy,radius,w)
+    components_list.append(A)
+for t in [1.25,2.5,5,10,bus_length]:
+    C = flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,t,angle,undercut)
+    components_list.append(C)
+for r in [0.5,1,1.5,2,2.5]:
+    for t in [1.25,2.5,5,10,bus_length]:
+        B = biconvex_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,t,angle,r)
+        components_list.append(B)
+components_list.append(flat_cmr(originx,originy,electrode_number,0.125,0.125,tether_width,angle,False))
+components_list.append(flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,tether_width,45,False))
+components_list.append(flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,tether_width,angle,False))
+components_list.append(flat_cmr(originx,originy,electrode_number,electrode_separation,electrode_width,tether_width,45,undercut))
+components_list.append(flat_cmr(originx,originy,electrode_number,0.375,0.375,tether_width,angle,False))
 
-all_components = gf.Component("all components")
-c1 = all_components << flat_cmr(originx,originy,20,electrode_separation,electrode_width,2.5,angle,False)
-c2 = all_components << flat_cmr(300,0,40,electrode_separation,electrode_width,5,angle,undercut)
-c3 = all_components << flat_cmr(600,0,60,electrode_separation,electrode_width,10,45,undercut)
-c4 = all_components << biconvex_cmr(originx,200,20,electrode_separation,electrode_width,2.5,angle,k)
-c5 = all_components << biconvex_cmr(300,200,40,electrode_separation,electrode_width,5,angle,k)
-c6 = all_components << biconvex_cmr(600,200,60,electrode_separation,electrode_width,10,angle,k)
-all_components << undercut_ring(originx,400,radius,width)
-all_components << undercut_ring(300,400,radius,15)
-all_components  << undercut_ring(600,400,radius,10)
-all_components << alignment_marker(700,700)
+
+grid = gf.grid(
+    components_list,
+    spacing =(20,20),
+    separation=True,
+    shape=(8,5),
+    align_x="x",
+    align_y="y",
+    edge_x="x",
+    edge_y="ymax"
+)
+
+all_components = gf.Component("all_components")
+all_components << grid
+all_components << alignment_marker(1400,1400)
+all_components << alignment_marker(1400,-300)
+all_components << alignment_marker(-350,1400)
+all_components << alignment_marker(-350,-300)
 
 
 all_components.write_gds("all_components.gds")
